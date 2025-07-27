@@ -32,6 +32,18 @@ Eigen::Matrix<T, Rows, Cols> remap(Eigen::Matrix<T, Rows, Cols> const& mat, U ol
     return ret;
 }
 
+// right hand, row major, zero depth
+mat4 perspective(Float fov_y, Float aspect, Float near, Float far);
+// right hand, row major, zero depth
+mat4 orthographic(Float left, Float right, Float bottom, Float top, Float near, Float far);
+// right hand, row major
+mat4 look_at(vec3 const& eye, vec3 const& center, vec3 const& up);
+
+// row major
+mat4 translate(vec3 const& v);
+// row major
+mat4 rotate(vec3 const& v, Float angle);
+
 
 RASTERIZER_NAME_SPACE_END
 #endif //MATHEMATICS_H

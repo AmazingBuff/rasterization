@@ -2,12 +2,11 @@
 // Created by AmazingBuff on 25-7-25.
 //
 
-#include <execution>
-
 RASTERIZER_NAME_SPACE_BEGIN
 
 struct EarlyZInfo
 {
+    bool depth_test_passed;
     uint32_t triangle_index;
     vec3 barycentric;
 };
@@ -29,8 +28,12 @@ Pixel pixel_shading(ShadingDescriptor const& descriptor, Vector<Triangle> const&
 {
     Pixel pixel = {0, 0, 0, 0};
 
-    Float z_min = 1.0f;
-    EarlyZInfo early_z_info;
+    Float z_max = descriptor.reverse_z ? 0.0f : 1.0f;
+    EarlyZInfo early_z_info{
+        .depth_test_passed = false,
+        .triangle_index = 0,
+        .barycentric = vec3(0.0f, 0.0f, 0.0f)
+    };
     for (uint32_t i = 0; i < triangles.size(); i++)
     {
         Triangle const& triangle = triangles[i];
@@ -54,22 +57,24 @@ Pixel pixel_shading(ShadingDescriptor const& descriptor, Vector<Triangle> const&
             vec3 barycentric = vec3(area.y(), area.z(), area.x()) / (area.x() + area.y() + area.z());
 
             Float z = triangle.v0.position.z() * barycentric.x() + triangle.v1.position.z() * barycentric.y() + triangle.v2.position.z() * barycentric.z();
-            if (z < z_min && z > -1.0)
+
+            if ((descriptor.reverse_z && z > z_max && z < 1.0) ||
+                (!descriptor.reverse_z && z < z_max && z > 0.0))
             {
-                z_min = z;
+                z_max = z;
                 if (descriptor.early_z)
                 {
+                    early_z_info.depth_test_passed = true;
                     early_z_info.triangle_index = i;
                     early_z_info.barycentric = barycentric;
                 }
                 else
                     pixel = apply_shading(triangle, barycentric, shading);
             }
-
         }
     }
 
-    if (descriptor.early_z)
+    if (descriptor.early_z && early_z_info.depth_test_passed)
     {
         Triangle const& triangle = triangles[early_z_info.triangle_index];
         vec3 const& barycentric = early_z_info.barycentric;
@@ -96,6 +101,8 @@ PixelFrame rasterize(RasterizerDescriptor const& descriptor)
             pos.x() = pos.x() / pos.w();
             pos.y() = pos.y() / pos.w();
             pos.z() = pos.z() / pos.w();
+            if (descriptor.rasterizer_state.reverse_z)
+                pos.z() = 1 - pos.z();
 
             out_vertices[i] = {pos, in};
         });
@@ -121,6 +128,8 @@ PixelFrame rasterize(RasterizerDescriptor const& descriptor)
             pos.x() = pos.x() / pos.w();
             pos.y() = pos.y() / pos.w();
             pos.z() = pos.z() / pos.w();
+            if (descriptor.rasterizer_state.reverse_z)
+                pos.z() = 1 - pos.z();
 
             out_vertices[i] = {pos, in};
         });
@@ -143,6 +152,7 @@ PixelFrame rasterize(RasterizerDescriptor const& descriptor)
 
     ShadingDescriptor shading_descriptor{
         .early_z = descriptor.rasterizer_state.early_z,
+        .reverse_z = descriptor.rasterizer_state.reverse_z,
     };
 
     for_each(ParallelStrategy::e_parallel, frame.pixels, [&](Pixel& pixel)

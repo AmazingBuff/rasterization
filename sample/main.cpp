@@ -6,74 +6,56 @@
 #include <chrono>
 #include <SDL3/SDL.h>
 
+using namespace Amazing;
 using namespace Amazing::Rasterizer;
 
 constexpr static uint32_t Width = 960;
 constexpr static uint32_t Height = 540;
 
+constexpr Float fov = 45.0;
+constexpr Float z_near = 0.1;
+constexpr Float z_far = 100.0;
+
 int main()
 {
-    Mesh mesh{
-        .vertices = {{{0.0f, 0.5f, 0.0f}, {0.5f, 0.5f}},
-                     {{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}},
-                     {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}},
-    };
+    mat4 model = translate(vec3(0, 1, -6)) * rotate(vec3(1, 1, 0), 45);
+    mat4 view = look_at(vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, -1.0), vec3(0.0, 1.0, 0.0));
+    mat4 projection = perspective(fov, static_cast<Float>(Width) / static_cast<Float>(Height), z_near, z_far);
+
+    Vector<Mesh> meshes = load_mesh("E:/code/github/rasterization/asset/obj/cube.obj");
 
     RasterizerDescriptor descriptor{
         .rasterizer_state{
             .flip_y = 1,
-            .early_z = 0
+            .early_z = 1
         },
         .width = Width,
         .height = Height,
-        .mesh{
-            .vertices = {{{0.0f, 0.5f, 0.0f}, {0.5f, 0.5f}},
-                     {{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}},
-                     {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}},
-        },
-        .vertexing = [](Vertex const& in, PixelIn& out) -> vec4
+        .mesh = meshes[0],
+        .vertexing = [&](Vertex const& in, PixelIn& out) -> vec4
         {
-            out.pos = in.position;
+            vec4 pos = vec4(in.position.x(), in.position.y(), in.position.z(), 1.0);
+            pos = view * model * pos;
+            out.pos = vec3(pos.x(), pos.y(), pos.z());
             out.uv = in.tex_coord;
             out.normal = in.normal;
             out.tangent = in.tangent;
-            return {in.position.x(), in.position.y(), in.position.z(), 1.0};
+
+            return projection * pos;
         },
         .shading = [](PixelIn const& in) -> vec4
         {
-            return {in.pos.x(), in.pos.y(), in.pos.z(), 1.0};
+            return {in.uv.x(), 0.0, in.uv.y(), 1.0};
         }
     };
 
-    auto start = std::chrono::high_resolution_clock::now();
-
-    PixelFrame frame = rasterize(descriptor);
-
-    auto end = std::chrono::high_resolution_clock::now();
-
-    std::cout << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
-
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
-        SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
+    SDL_Init(SDL_INIT_VIDEO);
 
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
-    if (!SDL_CreateWindowAndRenderer("examples/renderer/textures", Width, Height, 0, &window, &renderer)) {
-        SDL_Log("Couldn't create window/renderer: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
+    SDL_CreateWindowAndRenderer("rasterizer", Width, Height, 0, &window, &renderer);
 
-    SDL_Surface* surface = SDL_CreateSurfaceFrom(Width, Height, SDL_PIXELFORMAT_RGBA32, frame.pixels.data(), Width * sizeof(Pixel));
-    if (!surface) {
-        SDL_Log("Couldn't load bitmap: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
-
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-
-    SDL_DestroySurface(surface);
+    SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, Width, Height);
 
     bool quit = false;
     while (!quit)
@@ -89,6 +71,14 @@ int main()
                 break;
             }
         }
+
+        PixelFrame frame = rasterize(descriptor);
+
+        Pixel* pixels = nullptr;
+        int pitch;
+        SDL_LockTexture(texture, nullptr, reinterpret_cast<void**>(&pixels), &pitch);
+        memcpy(pixels, frame.pixels.data(), sizeof(Pixel) * Width * Height);
+        SDL_UnlockTexture(texture);
 
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);  /* black, full alpha */
         SDL_RenderClear(renderer);

@@ -23,6 +23,7 @@ struct Triangle
 struct ShadingDescriptor
 {
     uint32_t early_z : 1;
+    uint32_t reverse_z : 1;
 };
 
 

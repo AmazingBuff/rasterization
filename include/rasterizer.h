@@ -40,6 +40,7 @@ struct RasterizerDescriptor
     {
         uint32_t flip_y : 1;
         uint32_t early_z : 1;
+        uint32_t reverse_z : 1;
     } rasterizer_state;
 
     uint32_t width;
@@ -64,6 +65,7 @@ struct PixelFrame
     uint32_t height;
 };
 
+Vector<Mesh> load_mesh(String const& path);
 PixelFrame rasterize(RasterizerDescriptor const& descriptor);
 
 RASTERIZER_NAME_SPACE_END
