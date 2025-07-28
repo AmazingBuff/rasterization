@@ -5,6 +5,10 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb/stb_image.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb/stb_image_write.h"
 
 RASTERIZER_NAME_SPACE_BEGIN
 
@@ -80,5 +84,19 @@ Vector<Mesh> load_mesh(String const& path)
     return ret;
 }
 
+Texture load_image(String const& path)
+{
+    int width, height, channels;
+    uint8_t* image = stbi_load(path.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+    Texture ret{
+        .width = static_cast<uint32_t>(width),
+        .height = static_cast<uint32_t>(height),
+        .mip_levels = 1
+    };
+    ret.pixels.resize(width * height);
+    memcpy(ret.pixels.data(), image, width * height * sizeof(Pixel));
+    stbi_image_free(image);
+    return ret;
+}
 
 RASTERIZER_NAME_SPACE_END

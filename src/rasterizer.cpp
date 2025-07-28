@@ -11,19 +11,6 @@ struct EarlyZInfo
     vec3 barycentric;
 };
 
-Pixel apply_shading(Triangle const& triangle, vec3 const& barycentric, Shading const& shading)
-{
-    PixelIn pixel_in{
-        .pos = barycentric.x() * triangle.v0.pixel_in.pos + barycentric.y() * triangle.v1.pixel_in.pos + barycentric.z() * triangle.v2.pixel_in.pos,
-        .uv = barycentric.x() * triangle.v0.pixel_in.uv + barycentric.y() * triangle.v1.pixel_in.uv + barycentric.z() * triangle.v2.pixel_in.uv,
-        .normal = barycentric.x() * triangle.v0.pixel_in.normal + barycentric.y() * triangle.v1.pixel_in.normal + barycentric.z() * triangle.v2.pixel_in.normal,
-        .tangent = barycentric.x() * triangle.v0.pixel_in.tangent + barycentric.y() * triangle.v1.pixel_in.tangent + barycentric.z() * triangle.v2.pixel_in.tangent,
-    };
-
-    vec4 color = remap(clamp(shading(pixel_in), 0.0, 1.0), 0.0, 1.0, 0.0, 255.0);
-    return {static_cast<uint8_t>(color.x()), static_cast<uint8_t>(color.y()), static_cast<uint8_t>(color.z()), static_cast<uint8_t>(color.w())};
-}
-
 Pixel pixel_shading(ShadingDescriptor const& descriptor, Vector<Triangle> const& triangles, Shading const& shading, vec2 const& p)
 {
     Pixel pixel = {0, 0, 0, 0};
@@ -57,6 +44,23 @@ Pixel pixel_shading(ShadingDescriptor const& descriptor, Vector<Triangle> const&
             vec3 barycentric = vec3(area.y(), area.z(), area.x()) / (area.x() + area.y() + area.z());
 
             Float z = triangle.v0.position.z() * barycentric.x() + triangle.v1.position.z() * barycentric.y() + triangle.v2.position.z() * barycentric.z();
+            ShadingBuiltinOut shading_builtin_out{
+                .depth = z
+            };
+            Pixel val{};
+            if (!descriptor.early_z)
+            {
+                PixelIn pixel_in{
+                    .pos = barycentric.x() * triangle.v0.pixel_in.pos + barycentric.y() * triangle.v1.pixel_in.pos + barycentric.z() * triangle.v2.pixel_in.pos,
+                    .uv = barycentric.x() * triangle.v0.pixel_in.uv + barycentric.y() * triangle.v1.pixel_in.uv + barycentric.z() * triangle.v2.pixel_in.uv,
+                    .normal = barycentric.x() * triangle.v0.pixel_in.normal + barycentric.y() * triangle.v1.pixel_in.normal + barycentric.z() * triangle.v2.pixel_in.normal,
+                    .tangent = barycentric.x() * triangle.v0.pixel_in.tangent + barycentric.y() * triangle.v1.pixel_in.tangent + barycentric.z() * triangle.v2.pixel_in.tangent,
+                };
+
+                vec4 color = remap(clamp(shading(pixel_in, shading_builtin_out), 0.0, 1.0), 0.0, 1.0, 0.0, 255.0);
+                z = shading_builtin_out.depth;
+                val = {static_cast<uint8_t>(color.x()), static_cast<uint8_t>(color.y()), static_cast<uint8_t>(color.z()), static_cast<uint8_t>(color.w())};
+            }
 
             if ((descriptor.reverse_z && z > z_max && z < 1.0) ||
                 (!descriptor.reverse_z && z < z_max && z > 0.0))
@@ -69,7 +73,7 @@ Pixel pixel_shading(ShadingDescriptor const& descriptor, Vector<Triangle> const&
                     early_z_info.barycentric = barycentric;
                 }
                 else
-                    pixel = apply_shading(triangle, barycentric, shading);
+                    pixel = val;
             }
         }
     }
@@ -79,13 +83,22 @@ Pixel pixel_shading(ShadingDescriptor const& descriptor, Vector<Triangle> const&
         Triangle const& triangle = triangles[early_z_info.triangle_index];
         vec3 const& barycentric = early_z_info.barycentric;
 
-        pixel = apply_shading(triangle, barycentric, shading);
+        PixelIn pixel_in{
+            .pos = barycentric.x() * triangle.v0.pixel_in.pos + barycentric.y() * triangle.v1.pixel_in.pos + barycentric.z() * triangle.v2.pixel_in.pos,
+            .uv = barycentric.x() * triangle.v0.pixel_in.uv + barycentric.y() * triangle.v1.pixel_in.uv + barycentric.z() * triangle.v2.pixel_in.uv,
+            .normal = barycentric.x() * triangle.v0.pixel_in.normal + barycentric.y() * triangle.v1.pixel_in.normal + barycentric.z() * triangle.v2.pixel_in.normal,
+            .tangent = barycentric.x() * triangle.v0.pixel_in.tangent + barycentric.y() * triangle.v1.pixel_in.tangent + barycentric.z() * triangle.v2.pixel_in.tangent,
+        };
+
+        ShadingBuiltinOut shading_builtin_out{};
+        vec4 color = remap(clamp(shading(pixel_in, shading_builtin_out), 0.0, 1.0), 0.0, 1.0, 0.0, 255.0);
+        pixel = {static_cast<uint8_t>(color.x()), static_cast<uint8_t>(color.y()), static_cast<uint8_t>(color.z()), static_cast<uint8_t>(color.w())};
     }
 
     return pixel;
 }
 
-PixelFrame rasterize(RasterizerDescriptor const& descriptor)
+Texture rasterize(RasterizerDescriptor const& descriptor)
 {
     Vector<Triangle> triangles;
     if (!descriptor.mesh.indices.empty())
@@ -94,9 +107,13 @@ PixelFrame rasterize(RasterizerDescriptor const& descriptor)
         Vector<VertexOut> out_vertices(descriptor.mesh.vertices.size());
         for_each(ParallelStrategy::e_parallel, descriptor.mesh.vertices, [&](Vertex const& vertex)
         {
-            uint32_t i = &vertex - descriptor.mesh.vertices.data();
+            const uint32_t i = &vertex - descriptor.mesh.vertices.data();
+            VertexingBuiltinIn builtin{
+                .vertex_index = i,
+                .instance_index = 0, // no instance support yet
+            };
             PixelIn in;
-            vec4 pos = descriptor.vertexing(vertex, in);
+            vec4 pos = descriptor.vertexing(vertex, builtin, in);
             // to NDC, w don't need to change
             pos.x() = pos.x() / pos.w();
             pos.y() = pos.y() / pos.w();
@@ -121,9 +138,13 @@ PixelFrame rasterize(RasterizerDescriptor const& descriptor)
         Vector<VertexOut> out_vertices(descriptor.mesh.vertices.size());
         for_each(ParallelStrategy::e_parallel, descriptor.mesh.vertices, [&](Vertex const& vertex)
         {
-            uint32_t i = &vertex - descriptor.mesh.vertices.data();
+            const uint32_t i = &vertex - descriptor.mesh.vertices.data();
+            VertexingBuiltinIn builtin{
+                .vertex_index = i,
+                .instance_index = 0, // no instance support yet
+            };
             PixelIn in;
-            vec4 pos = descriptor.vertexing(vertex, in);
+            vec4 pos = descriptor.vertexing(vertex, builtin, in);
             // to NDC, w don't need to change
             pos.x() = pos.x() / pos.w();
             pos.y() = pos.y() / pos.w();
@@ -144,9 +165,10 @@ PixelFrame rasterize(RasterizerDescriptor const& descriptor)
     }
 
 
-    PixelFrame frame{
+    Texture frame{
         .width = descriptor.width,
         .height = descriptor.height,
+        .mip_levels = 1,
     };
     frame.pixels.resize(frame.width * frame.height);
 

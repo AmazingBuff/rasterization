@@ -27,12 +27,13 @@ int main()
     RasterizerDescriptor descriptor{
         .rasterizer_state{
             .flip_y = 1,
-            .early_z = 1
+            .early_z = 1,
+            .reverse_z = 1,
         },
         .width = Width,
         .height = Height,
         .mesh = meshes[0],
-        .vertexing = [&](Vertex const& in, PixelIn& out) -> vec4
+        .vertexing = [&](Vertex const& in, VertexingBuiltinIn const&, PixelIn& out) -> vec4
         {
             vec4 pos = vec4(in.position.x(), in.position.y(), in.position.z(), 1.0);
             pos = view * model * pos;
@@ -43,7 +44,7 @@ int main()
 
             return projection * pos;
         },
-        .shading = [](PixelIn const& in) -> vec4
+        .shading = [](PixelIn const& in, ShadingBuiltinOut&) -> vec4
         {
             return {in.uv.x(), 0.0, in.uv.y(), 1.0};
         }
@@ -72,7 +73,7 @@ int main()
             }
         }
 
-        PixelFrame frame = rasterize(descriptor);
+        Texture frame = rasterize(descriptor);
 
         Pixel* pixels = nullptr;
         int pitch;

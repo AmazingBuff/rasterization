@@ -6,6 +6,7 @@
 #define RASTERIZER_H
 
 #include "internal/mathematics.h"
+#include "resource/texture.h"
 
 RASTERIZER_NAME_SPACE_BEGIN
 
@@ -31,8 +32,19 @@ struct PixelIn
     vec3 tangent;
 };
 
-using Vertexing = Functional<vec4(Vertex const&, PixelIn&)>;
-using Shading = Functional<vec4(PixelIn const&)>;
+struct VertexingBuiltinIn
+{
+    uint32_t vertex_index;
+    uint32_t instance_index;
+};
+
+struct ShadingBuiltinOut
+{
+    Float depth;
+};
+
+using Vertexing = Functional<vec4(Vertex const&, VertexingBuiltinIn const&, PixelIn&)>;
+using Shading = Functional<vec4(PixelIn const&, ShadingBuiltinOut&)>;
 
 struct RasterizerDescriptor
 {
@@ -50,23 +62,9 @@ struct RasterizerDescriptor
     Shading shading;
 };
 
-struct Pixel
-{
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-    uint8_t a;
-};
-
-struct PixelFrame
-{
-    Vector<Pixel> pixels;
-    uint32_t width;
-    uint32_t height;
-};
-
 Vector<Mesh> load_mesh(String const& path);
-PixelFrame rasterize(RasterizerDescriptor const& descriptor);
+Texture load_image(String const& path);
+Texture rasterize(RasterizerDescriptor const& descriptor);
 
 RASTERIZER_NAME_SPACE_END
 
