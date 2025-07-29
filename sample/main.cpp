@@ -18,17 +18,19 @@ constexpr Float z_far = 100.0;
 
 int main()
 {
-    mat4 model = translate(vec3(0, 1, -6)) * rotate(vec3(1, 1, 0), 45);
+    mat4 model = translate(vec3(0, 0.5, -2)) * rotate(vec3(0, 1, 0), 90) * rotate(vec3(01, 0, 0), 90);
     mat4 view = look_at(vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, -1.0), vec3(0.0, 1.0, 0.0));
     mat4 projection = perspective(fov, static_cast<Float>(Width) / static_cast<Float>(Height), z_near, z_far);
 
-    Vector<Mesh> meshes = load_mesh("E:/code/github/rasterization/asset/obj/cube.obj");
+    //Vector<Mesh> meshes = load_mesh("E:/code/github/rasterization/asset/obj/cube.obj");
+    Vector<Mesh> meshes = load_mesh("E:/code/github/rasterization/asset/obj/viking_room/viking_room.obj");
+    Texture tex = load_image("E:/code/github/rasterization/asset/obj/viking_room/viking_room.png");
 
     RasterizerDescriptor descriptor{
         .rasterizer_state{
             .flip_y = 1,
             .early_z = 1,
-            .reverse_z = 1,
+            .reverse_z = 0,
         },
         .width = Width,
         .height = Height,
@@ -44,9 +46,10 @@ int main()
 
             return projection * pos;
         },
-        .shading = [](PixelIn const& in, ShadingBuiltinOut&) -> vec4
+        .shading = [&](PixelIn const& in, ShadingBuiltinOut&) -> vec4
         {
-            return {in.uv.x(), 0.0, in.uv.y(), 1.0};
+            Pixel pixel = bilinear_lod(tex, in.uv);
+            return pixel;
         }
     };
 
@@ -73,6 +76,7 @@ int main()
             }
         }
 
+        model = translate(vec3(0, 0.5, -2)) * rotate(vec3(0, 1, 0), 90 * SDL_GetTicks() / 1000) * rotate(vec3(01, 0, 0), 90);
         Texture frame = rasterize(descriptor);
 
         Pixel* pixels = nullptr;

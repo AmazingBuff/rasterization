@@ -143,7 +143,7 @@ Texture rasterize(RasterizerDescriptor const& descriptor)
                 .vertex_index = i,
                 .instance_index = 0, // no instance support yet
             };
-            PixelIn in;
+            PixelIn in{};
             vec4 pos = descriptor.vertexing(vertex, builtin, in);
             // to NDC, w don't need to change
             pos.x() = pos.x() / pos.w();

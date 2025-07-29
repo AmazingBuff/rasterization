@@ -15,6 +15,12 @@ struct Pixel
     uint8_t g;
     uint8_t b;
     uint8_t a;
+
+    operator vec4() const
+    {
+        return {static_cast<Float>(r) / 255.0f, static_cast<Float>(g) / 255.0f,
+                    static_cast<Float>(b) / 255.0f, static_cast<Float>(a) / 255.0f};
+    }
 };
 
 struct Texture

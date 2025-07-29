@@ -87,6 +87,7 @@ Vector<Mesh> load_mesh(String const& path)
 Texture load_image(String const& path)
 {
     int width, height, channels;
+    stbi_set_flip_vertically_on_load(true);
     uint8_t* image = stbi_load(path.c_str(), &width, &height, &channels, STBI_rgb_alpha);
     Texture ret{
         .width = static_cast<uint32_t>(width),
